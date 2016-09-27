@@ -1,6 +1,8 @@
 import unittest
 import operator
-import functools
+import six
+
+from six.moves import range,reduce
 
 import arybo.lib.mba_exprs as EX
 from arybo.lib import MBA
@@ -36,9 +38,6 @@ class MBAExprsTest:
             simplify_inplace(expr.vec)
         simplify_inplace(e.vec)
         simplify_inplace(expr.vec)
-        if expr != e:
-            print(expr)
-            print(e)
         self.assertEqual(expr, e)
 
     def test_leaves(self):
@@ -71,7 +70,7 @@ class MBAExprsTest:
         for op in ops:
             self.exprEqual(
                 op[0](*args_expr),
-                functools.reduce(op[1], args))
+                reduce(op[1], args))
 
     def test_binaryops(self):
         ops = (
@@ -85,8 +84,8 @@ class MBAExprsTest:
 
         for op in ops:
             self.exprEqual(
-                functools.reduce(op[0], args_expr),
-                functools.reduce(op[1], args))
+                reduce(op[0], args_expr),
+                reduce(op[1], args))
 
         E0 = EX.ExprAdd(self.x8_expr, self.x8_expr)
         self.exprEqual(EX.ExprAdd(E0, E0), self.x8 << 2)

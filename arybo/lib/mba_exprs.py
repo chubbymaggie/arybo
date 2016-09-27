@@ -1,10 +1,13 @@
 import functools
 import operator
+import six
+
+from six.moves import range, reduce
 
 from arybo.lib import MBA
 from pytanque import imm, expand_esf_inplace, simplify_inplace, Vector, esf
 
-class Expr:
+class Expr(object):
     @property
     def nbits(self):
         raise NotImplementedError()
@@ -124,7 +127,7 @@ class ExprXor(ExprNaryOp):
 class ExprAnd(ExprNaryOp):
     @staticmethod
     def compute(vec, i, args, ctx, use_esf):
-        return functools.reduce(lambda x,y: x*y, args)
+        return reduce(lambda x,y: x*y, args)
 
 class ExprOr(ExprNaryOp):
     @staticmethod
