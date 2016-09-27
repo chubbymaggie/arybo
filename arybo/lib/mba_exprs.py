@@ -214,7 +214,6 @@ class ExprSlice(ExprUnaryOp):
         if not isinstance(slice_, slice):
             raise ValueError("slice_ must a slice object")
         if (not slice_.step is None) and (slice_.step != 1):
-            print(slice_.step)
             raise ValueError("only slices with a step of 1 are supported!")
         self.idxes = list(range(*slice_.indices(self.arg.nbits)))
 
@@ -261,13 +260,39 @@ class ExprBroadcast(ExprUnaryOp):
         return ret
 
 # Arithmetic ops
-class ExprAdd(ExprBinaryOp):
+class ExprBinopCarry(ExprBinaryOp):
+    class CtxCache:
+        def __init__(self, nbits):
+            self.cache = [CtxUninitialized]*nbits
+            self.last_bit = -1
+            self.carry = imm(0)
+
     def init_ctx(self):
-        return imm(0)
+        return ExprBinopCarry.CtxCache(self.nbits)
+
+    def eval(self, vec, i, ctxes, use_esf):
+        ctx = self.get_ctx(ctxes)
+        CC = ctx.get()
+        ret = CC.cache[i]
+        if not ret is CtxUninitialized:
+            return ret
+        if i < CC.last_bit:
+            raise ValueError("asking for a bit before the last computed bit. This should not happen!")
+        for j in range(CC.last_bit+1, i+1):
+            a = self.X.eval(vec, j, ctxes, use_esf)
+            b = self.Y.eval(vec, j, ctxes, use_esf)
+            CC.cache[j] = self.compute_binop_(vec, j, a, b, CC, use_esf)
+        CC.last_bit = i
+        return CC.cache[i]
 
     @staticmethod
-    def compute_binop(vec, i, X, Y, ctx, use_esf):
-        carry = ctx.get()
+    def compute_binop_(vec, i, X, Y, ctx, use_esf):
+        raise NotImplementedError()
+
+class ExprAdd(ExprBinopCarry):
+    @staticmethod
+    def compute_binop_(vec, i, X, Y, CC, use_esf):
+        carry = CC.carry
         
         sum_args = simplify_inplace(X+Y)
         ret = simplify_inplace(sum_args + carry)
@@ -276,16 +301,14 @@ class ExprAdd(ExprBinaryOp):
         if not use_esf:
             expand_esf_inplace(carry)
             simplify_inplace(carry)
-        ctx.set(carry)
+
+        CC.carry = carry
         return ret
 
-class ExprSub(ExprBinaryOp):
-    def init_ctx(self):
-        return imm(0)
-
+class ExprSub(ExprBinopCarry):
     @staticmethod
-    def compute_binop(vec, i, X, Y, ctx, use_esf):
-        carry = ctx.get()
+    def compute_binop_(vec, i, X, Y, CC, use_esf):
+        carry = CC.carry
         
         sum_args = simplify_inplace(X+Y)
         ret = simplify_inplace(sum_args + carry)
@@ -293,7 +316,8 @@ class ExprSub(ExprBinaryOp):
         if not use_esf:
             expand_esf_inplace(carry)
             carry = simplify_inplace(carry)
-        ctx.set(carry)
+
+        CC.carry = carry
         return ret
 
 # x*y = x*(y0+y1<<1+y2<<2+...)

@@ -63,6 +63,18 @@ class MBAExprsTest:
             (EX.ExprXor, operator.xor),
             (EX.ExprAnd, operator.and_),
             (EX.ExprOr,  operator.or_),
+        )
+
+        args_expr = (self.x4_expr, self.y4_expr, self.z4_expr)
+        args = (self.x4, self.y4, self.z4)
+
+        for op in ops:
+            self.exprEqual(
+                op[0](*args_expr),
+                functools.reduce(op[1], args))
+
+    def test_binaryops(self):
+        ops = (
             (EX.ExprAdd, operator.add),
             (EX.ExprSub, operator.sub),
             (EX.ExprMul, operator.mul),
@@ -70,20 +82,45 @@ class MBAExprsTest:
 
         args_expr = (self.x4_expr, self.y4_expr, self.z4_expr)
         args = (self.x4, self.y4, self.z4)
-        args_expr = args_expr[2:]
-        args = args[2:]
-
-        t0 = EX.ExprMul(self.x4_expr, self.y4_expr)
-        t1 = EX.ExprMul(t0, self.z4_expr)
-        #t1 = EX.ExprMul(EX.ExprVar(EX.eval_expr(t0)), self.z4_expr)
-        print(t1.nbits)
-        print(EX.eval_expr(t1))
-        print(self.x4 * self.y4 * self.z4)
 
         for op in ops:
             self.exprEqual(
                 functools.reduce(op[0], args_expr),
                 functools.reduce(op[1], args))
+
+        E0 = EX.ExprAdd(self.x8_expr, self.x8_expr)
+        self.exprEqual(EX.ExprAdd(E0, E0), self.x8 << 2)
+
+    def test_rotate_binop(self):
+        E0 = EX.ExprRor(
+            EX.ExprAdd(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4+self.y4).ror(1))
+
+        E0 = EX.ExprRor(
+            EX.ExprSub(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4-self.y4).ror(1))
+
+        E0 = EX.ExprRor(
+            EX.ExprMul(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4*self.y4).ror(1))
+
+        E0 = EX.ExprRol(
+            EX.ExprAdd(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4+self.y4).rol(1))
+
+        E0 = EX.ExprRol(
+            EX.ExprSub(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4-self.y4).rol(1))
+
+        E0 = EX.ExprRol(
+            EX.ExprMul(self.x4_expr, self.y4_expr),
+            1)
+        self.exprEqual(E0, (self.x4*self.y4).rol(1))
 
     def test_logical(self):
         ops = (
@@ -122,7 +159,10 @@ class MBAExprsTestNoEsf(MBAExprsTest, unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kwargs)
         self.use_esf = False
 
-#class MBAExprsTestEsf(MBAExprsTest, unittest.TestCase):
-#    def __init__(self, *args, **kwargs):
-#        unittest.TestCase.__init__(self, *args, **kwargs)
-#        self.use_esf = True
+class MBAExprsTestEsf(MBAExprsTest, unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        unittest.TestCase.__init__(self, *args, **kwargs)
+        self.use_esf = True
+
+if __name__ == "__main__":
+    unittest.main()
