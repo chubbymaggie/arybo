@@ -1,5 +1,10 @@
 from arybo.lib import MBA
 import arybo.lib.mba_exprs as EX
+import sys
+
+use_exprs = False
+if len(sys.argv) >= 2:
+    use_exprs = int(sys.argv[1])
 
 def f(x):
     v0 = x*0xe5 + 0xF7
@@ -15,10 +20,15 @@ def f(x):
 
 mba8 = MBA(8)
 X = mba8.var('X')
-#X = EX.ExprBV(X)
+if use_exprs:
+    X = EX.ExprBV(X)
 res = f(X)
+if use_exprs:
+    res = EX.eval_expr(res,use_esf=False)
+print(res)
+if use_exprs:
+    X = X.v
 VD = res.vectorial_decomp([X])
 
-print(res)
 print("====")
 print("Cst = " + hex(VD.cst().get_int_be()))
