@@ -19,17 +19,17 @@ class MBAExprsTest:
         self.x4 = self.mba4.var('x')
         self.y4 = self.mba4.var('y')
         self.z4 = self.mba4.var('z')
-        self.x4_expr = EX.ExprVar(self.x4)
-        self.y4_expr = EX.ExprVar(self.y4)
-        self.z4_expr = EX.ExprVar(self.z4)
+        self.x4_expr = EX.ExprBV(self.x4)
+        self.y4_expr = EX.ExprBV(self.y4)
+        self.z4_expr = EX.ExprBV(self.z4)
 
         self.x8 = self.mba8.var('x')
         self.y8 = self.mba8.var('y')
         self.z8 = self.mba8.var('z')
 
-        self.x8_expr = EX.ExprVar(self.x8)
-        self.y8_expr = EX.ExprVar(self.y8)
-        self.z8_expr = EX.ExprVar(self.z8)
+        self.x8_expr = EX.ExprBV(self.x8)
+        self.y8_expr = EX.ExprBV(self.y8)
+        self.z8_expr = EX.ExprBV(self.z8)
 
     def exprEqual(self, expr, e):
         expr = EX.eval_expr(expr, self.use_esf)

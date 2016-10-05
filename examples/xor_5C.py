@@ -1,4 +1,6 @@
 from arybo.lib import MBA
+import arybo.lib.mba_exprs as EX
+
 def f(x):
     v0 = x*0xe5 + 0xF7
     v0 = v0&0xFF
@@ -13,6 +15,7 @@ def f(x):
 
 mba8 = MBA(8)
 X = mba8.var('X')
+#X = EX.ExprBV(X)
 res = f(X)
 VD = res.vectorial_decomp([X])
 
