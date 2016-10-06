@@ -1,6 +1,7 @@
 import functools
 import operator
 import six
+import collections
 
 from six.moves import range, reduce
 
@@ -110,6 +111,10 @@ class Expr(object):
         self.__check_arg_int(n)
         return ExprRor(self,n)
 
+    def udiv(self,o):
+        o = self.__parse_arg(o)
+        return ExprDiv(self, o)
+
     def __getitem__(self,s):
         if not isinstance(s, slice):
             raise ValueError("can only get slices")
@@ -131,6 +136,14 @@ class ExprCst(Expr):
 
     def to_cst(self):
         return self.n
+
+    @staticmethod
+    def get_cst(obj):
+        if isinstance(obj, ExprCst):
+            return obj.n
+        if isinstance(obj, six.integer_types):
+            return obj
+        raise ValueError("obj must be an ExprCst or an integer")
 
 class ExprBV(Expr):
     def __init__(self, v):
@@ -186,16 +199,16 @@ class ExprNaryOp(Expr):
         return self.compute(vec, i, args, ctx, use_esf)
 
 # Binary ops
-# We can't implement this as a UnaryOp, because we need one context per binary
+# We can't implement this as an NaryOp, because we need one context per binary
 # operation (and in this case, they would share the same context, leading to
 # incorrect results).
 class ExprBinaryOp(Expr):
     def __init__(self, X, Y):
-        if (X.nbits != Y.nbits):
+        self._nbits = X.nbits
+        if (self._nbits != Y.nbits):
             raise ValueError("X and Y must have the same number of bits!")
         self.X = X
         self.Y = Y
-        self._nbits = self.X.nbits
 
     @property
     def args(self):
@@ -242,7 +255,7 @@ class ExprOr(ExprNaryOp):
 class ExprShl(ExprUnaryOp):
     def __init__(self, arg, n):
         super(ExprShl, self).__init__(arg)
-        self.n = n
+        self.n = ExprCst.get_cst(n)
 
     def eval(self, vec, i, ctx, args, use_esf):
         if i < self.n:
@@ -252,7 +265,7 @@ class ExprShl(ExprUnaryOp):
 class ExprLShr(ExprUnaryOp):
     def __init__(self, arg, n):
         super(ExprLShr, self).__init__(arg)
-        self.n = n
+        self.n = ExprCst.get_cst(n)
 
     def eval(self, vec, i, ctx, args, use_esf):
         if i >= self.nbits-self.n:
@@ -262,7 +275,7 @@ class ExprLShr(ExprUnaryOp):
 class ExprRol(ExprUnaryOp):
     def __init__(self, arg, n):
         super(ExprRol, self).__init__(arg)
-        self.n = n
+        self.n = ExprCst.get_cst(n)
 
     def eval(self, vec, i, ctx, args, use_esf):
         return args[0].eval(vec, (i-self.n)%self.nbits, use_esf)
@@ -270,7 +283,7 @@ class ExprRol(ExprUnaryOp):
 class ExprRor(ExprUnaryOp):
     def __init__(self, arg, n):
         super(ExprRor, self).__init__(arg)
-        self.n = n
+        self.n = ExprCst.get_cst(n)
 
     def eval(self, vec, i, ctx, args, use_esf):
         return args[0].eval(vec, (i+self.n)%self.nbits, use_esf)
@@ -280,7 +293,7 @@ class ExprRor(ExprUnaryOp):
 class ExprExtend(ExprUnaryOp):
     def __init__(self, arg, n):
         super(ExprExtend, self).__init__(arg)
-        self.n = n
+        self.n = ExprCst.get_cst(n)
         self.arg_nbits = self.arg.nbits
         assert(n >= self.nbits)
 
@@ -338,17 +351,14 @@ class ExprConcat(ExprNaryOp):
             i -= cur_len
             cur_arg = next(it)
             cur_len = cur_arg.nbits
-        if i < 0:
-            print(org_i, [a.nbits for a in args])
-            assert(i>=0)
         return cur_arg.eval(vec, i, use_esf)
 
 class ExprBroadcast(ExprUnaryOp):
     def __init__(self, arg, idx, nbits):
         super(ExprBroadcast, self).__init__(arg)
         assert(idx >= 0)
-        self.idx = idx
-        self._nbits = nbits
+        self.idx = ExprCst.get_cst(idx)
+        self._nbits = ExprCst.get_cst(nbits)
 
     def init_ctx(self):
         return CtxUninitialized
@@ -444,12 +454,51 @@ class ExprMul(ExprInner, ExprBinaryOp):
                 ExprAnd(ExprShl(X, i), ExprBroadcast(Y, i, nbits)))
         ExprInner.__init__(self,e)
 
+class ExprDiv(ExprInner, ExprBinaryOp):
+    def __init__(self, X, n):
+        ExprBinaryOp.__init__(self,X,n)
+        nbits = X.nbits
+        # TODO: assert nbits == n.nbits
+
+        if not isinstance(n, ExprCst):
+            raise ValueError("only a division by a known constant is supported!")
+        n = n.n
+        nc = ((2**nbits)/n)*n - 1
+        for p in range(nbits, 2*self.nbits+1):
+            if(2**p > nc*(n - 1 - ((2**p - 1) % n))):
+                break
+        else:
+            raise RuntimeError("division: unable to find the shifting count")
+        m = (2**p + n - 1 - ((2**p - 1) % n))//n
+
+        mul_nbits = 2*nbits+1
+        e = ExprSlice(
+                ExprLShr(
+                    ExprMul(
+                        ExprZX(X, mul_nbits),
+                        ExprCst(m, mul_nbits)),
+                    ExprCst(p, mul_nbits)),
+                slice(0, nbits, 1))
+        ExprInner.__init__(self,e)
+
 # Generic visitors
-def visit_dfs(e, cb):
-    if e.args != None:
-        for a in e.args:
-            visit_dfs(a, cb)
-    cb(e)
+def visit(e, visitor):
+    def visit_type(e):
+        a = "visit_%s" % e.__name__[4:]
+        return a
+    e_try = collections.deque()
+    e_try.append(e.__class__)
+    cb = None
+    while len(e_try) > 0:
+        cur_ty = e_try.pop()
+        try:
+            cb = getattr(visitor, visit_type(cur_ty))
+            break
+        except AttributeError:
+            e_try.extend((B for B in cur_ty.__bases__ if not B in (object,Expr,ExprInner)))
+    if cb is None:
+        cb = getattr(visitor, "visit_Expr")
+    return cb(e)
 
 # Evaluator
 class ExprWithCtx(object):
@@ -501,3 +550,52 @@ def eval_expr(e,use_esf=False):
         ret[i] = ectx.eval(ret, i, use_esf)
     mba = MBA(len(ret))
     return mba.from_vec(ret)
+
+# Prettyprinter
+class PrettyPrinter(object):
+    def visit(self, e):
+        return visit(e, self)
+    def visit_Cst(self, e):
+        return hex(e.n)
+    def visit_BV(self, e):
+        e = e.v
+        if not e.name is None:
+            return e.name
+        estr = ", ".join((str(a) for a in e.vec))
+        return "BV(%s)" % estr
+    def visit_Not(self, e):
+        return "~"+self.visit(e.arg)
+    def visit_Shl(self, e):
+        return "(%s << %d)" % (self.visit(e.arg), e.n)
+    def visit_LShr(self, e):
+        return "(%s >> %d)" % (self.visit(e.arg), e.n)
+    def visit_Rol(self, e):
+        return "rol(%s,%d)" % (self.visit(e.arg), e.n)
+    def visit_Ror(self, e):
+        return "rol(%s,%d)" % (self.visit(e.arg), e.n)
+    def visit_SX(self, e):
+        return "sx(%d, %s)" % (e.n, self.visit(e.arg))
+    def visit_ZX(self, e):
+        return "zx(%d, %s)" % (e.n, self.visit(e.arg))
+    def expr_Slice(self, e):
+        idxes = sorted(e.idxes)
+        return "%s[%d:%d]" % (self.visit(e.arg), idxes[0], idxes[-1])
+    def visit_Concat(self, e):
+        return "concat(%s)" % (",".join((self.visit(a) for a in e.args)))
+    def visit_Broadcast(self, e):
+        return "broadcast(%d, %s)" % (e.idx, self.visit(e.arg))
+    def visit_nary_args(self, e, ops):
+        op = ops[type(e)]
+        return "("+(" %s " % op).join(self.visit(a) for a in e.args)+")"
+    def visit_BinaryOp(self, e):
+        ops = {ExprAdd: '+', ExprMul: '*', ExprSub: '-', ExprDiv: '/'}
+        return self.visit_nary_args(e, ops)
+    def visit_NaryOp(self, e):
+        ops = {ExprXor: '^', ExprAnd: '&', ExprOr: '|'}
+        return self.visit_nary_args(e, ops)
+
+def prettyprint(e):
+    ret = PrettyPrinter().visit(e)
+    if ret[0] == '(' and ret[-1] == ')':
+        ret = ret[1:-1]
+    return ret

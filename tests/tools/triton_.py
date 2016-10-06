@@ -95,10 +95,9 @@ class TritonTest():
                 op[0](self.x8_t,self.y8_t),
                 op[1](self.x8,self.y8))
 
-        if not self.use_expr:
-            # One udiv test because it can take a lot of time...
-            e = TAst.bvudiv(self.x8_t, TAst.bv(15, 8))
-            self.astEquals(e, self.x8.udiv(15))
+        # One udiv test because it can take a lot of time...
+        e = TAst.bvudiv(self.x8_t, TAst.bv(15, 8))
+        self.astEquals(e, self.x8.udiv(15))
 
     def test_shifts(self):
         # Triton interface is not consistant between sh{r,l} and ro{l,r}.

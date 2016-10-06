@@ -90,6 +90,9 @@ class MBAExprsTest:
         E0 = EX.ExprAdd(self.x8_expr, self.x8_expr)
         self.exprEqual(EX.ExprAdd(E0, E0), self.x8 << 2)
 
+        for i in range(1,16):
+            self.exprEqual(EX.ExprDiv(self.x4_expr, EX.ExprCst(i, 4)), self.x4.udiv(i))
+
     def test_rotate_binop(self):
         E0 = EX.ExprRor(
             EX.ExprAdd(self.x4_expr, self.y4_expr),
