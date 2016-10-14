@@ -568,11 +568,9 @@ pa::Expr& pa::simps::simplify(Expr& e)
 
 pa::Vector& pa::simps::simplify(Vector& v)
 {
-//#pragma omp parallel for
-	//for (Expr& e: v) {
-	for (size_t i = 0; i < v.size(); i++) {
+  tbb::parallel_for(size_t{0}, v.size(), [&v](size_t i) {
 		simplify(v[i]);
-	}
+	});
 	return v;
 }
 

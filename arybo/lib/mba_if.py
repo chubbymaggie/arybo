@@ -102,7 +102,7 @@ class MBAVariable(object):
     def __init__(self, mba, arg):
         self.mba = mba
         self.arg = arg
-        self._always_simplify = False
+        self._always_simplify = True
         self._expand_esf = False
         self.name = None
 

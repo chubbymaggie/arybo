@@ -5,7 +5,7 @@ import collections
 
 from six.moves import range, reduce
 
-from arybo.lib import MBA
+from arybo.lib import MBA, simplify_inplace
 from pytanque import imm, expand_esf_inplace, simplify_inplace, Vector, esf
 
 class Expr(object):
@@ -190,8 +190,7 @@ class ExprNaryOp(Expr):
         # TODO assert every args has the same size
         return self.args[0].nbits
 
-    @staticmethod
-    def compute(vec, i, args, ctx, use_esf):
+    def compute(self, vec, i, args, ctx, use_esf):
         raise NotImplementedError()
 
     def eval(self, vec, i, ctx, args, use_esf):
@@ -230,18 +229,33 @@ class ExprBinaryOp(Expr):
 
 # Nary ops
 class ExprXor(ExprNaryOp):
-    @staticmethod
-    def compute(vec, i, args, ctx, use_esf):
+    def compute(self, vec, i, args, ctx, use_esf):
         return sum(args, imm(0))
 
 class ExprAnd(ExprNaryOp):
-    @staticmethod
-    def compute(vec, i, args, ctx, use_esf):
+    def __init__(self, *args):
+        super(ExprAnd,self).__init__(*args)
+        self.mask = (1<<self.nbits)-1
+        self._rem_args = []
+        for a in args:
+            if isinstance(a, ExprCst):
+                self.mask &= a.n
+    def compute(self, vec, i, args, ctx, use_esf):
+        if ((self.mask >> i) & 1) == 0:
+            return imm(0)
         return reduce(lambda x,y: x*y, args)
 
 class ExprOr(ExprNaryOp):
-    @staticmethod
-    def compute(vec, i, args, ctx, use_esf):
+    def __init__(self, *args):
+        super(ExprOr,self).__init__(*args)
+        self.mask = 0
+        for a in args:
+            if isinstance(a, ExprCst):
+                self.mask |= a.n
+
+    def compute(self, vec, i, args, ctx, use_esf):
+        if ((self.mask >> i) & 1) == 1:
+            return imm(1)
         args = list(args)
         ret = esf(1, args)
         for i in range(2, len(args)+1):
@@ -512,7 +526,7 @@ class ExprWithCtx(object):
         return self.e.nbits
 
     def eval(self, vec, i, use_esf):
-        return self.e.eval(vec, i, self.ctx, self.args, use_esf)
+        return simplify_inplace(self.e.eval(vec, i, self.ctx, self.args, use_esf))
 
 class CtxWrapper:
     def __init__(self, v):

@@ -30,6 +30,11 @@
 #include <algorithm>
 #include <tuple>
 
+#include <pa/config.h>
+#ifdef PA_USE_TBB
+#include <tbb/parallel_sort.h>
+#endif
+
 namespace pa {
 
 template <class V, int LinLimit = 8>
@@ -385,6 +390,9 @@ protected:
 public:
 	void sort()
 	{
+#ifdef PA_USE_TBB
+		tbb::parallel_sort(begin(), end());
+#endif
 		std::sort(begin(), end());
 	}
 
