@@ -28,7 +28,7 @@ import copy
 import six
 from six.moves import range
 
-from pytanque import symbol, imm, Vector, Matrix, simplify, simplify_inplace, expand_esf_inplace, subs_vectors, subs_exprs, analyses, esf_vector, esf, expand_esf, or_to_esf_inplace
+from pytanque import symbol, imm, Vector, Matrix, simplify, simplify_inplace, expand_esf_inplace, subs_vectors, subs_exprs, subs_exprs_inplace, analyses, esf_vector, esf, expand_esf, or_to_esf_inplace, Expr
 
 def get_vector_from_cst(nbits, n):
     vec = Vector(nbits)
@@ -51,25 +51,35 @@ def next_zero_bit(v):
     v = (v ^ (v - 1)) >> 1
     return popcount(v)
 
-def evaluate_expr(E, nbits, values):
-    vecs = [v.vec for v in values.keys()]
-    values = list(values.values())
+def evaluate_expr(E, nbits, map_):
+    # keys of map_ can be mba variables or symbols
+    #   => an mba variable must map to an integer
+    #   => a symbol must map to an expression
+    keys = []
+    values = []
+    for k,v in six.iteritems(map_):
+        # TOFIX: not a clean test
+        if hasattr(k, "vec"):
+            if not isinstance(v, six.integer_types):
+                raise ValueError("an MBAVariable must map to an integer value!")
+            keys.extend(k.vec)
+            values.extend(imm((v>>i)&1) for i in range(k.nbits))
+        elif isinstance(k, Expr):
+            if not k.is_sym():
+                raise ValueError("only symbols or MBAVariable can be a key")
+            if not isinstance(v, Expr):
+                raise ValueError("a symbol can only be mapped to an expression")
+            keys.append(k)
+            values.append(v)
+
     E = expand_esf(E)
     simplify_inplace(E)
+    subs_exprs_inplace(E, keys, values)
+    simplify_inplace(E)
     try:
-        ret_V = subs_vectors(E, vecs, values)
-        simplify_inplace(ret_V)
-        return ret_V.get_int_be()
+        return E.get_int_be()
     except RuntimeError:
-        vecs_f = []
-        for v in vecs:
-            vecs_f.extend(v)
-        values_f = []
-        for v in values:
-            values_f.extend(v)
-        ret_V = subs_exprs(E, vecs_f, values_f)
-        simplify_inplace(ret_V)
-        return ret_V
+        return E
 
 def test_N(nbits, X, n):
     ret = imm(1)
@@ -246,6 +256,7 @@ class MBAImpl(object):
         return ret
 
     def mul_n_org(self, X, n):
+        n = n & self.max_uint
         ret = Vector(self.nbits)
         i = 0
         while n > 0:
@@ -261,6 +272,7 @@ class MBAImpl(object):
         ret = Vector(self.nbits)
         if (n == 0):
             return ret
+        n = n & self.max_uint
         i = 0
         final_sum = 0
         not_x = None

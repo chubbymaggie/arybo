@@ -102,8 +102,9 @@ class MBAVariable(object):
     def __init__(self, mba, arg):
         self.mba = mba
         self.arg = arg
-        self._always_simplify = False
+        self._always_simplify = True
         self._expand_esf = False
+        self.name = None
 
     def __hash__(self):
         return id(self)
@@ -181,6 +182,8 @@ class MBAVariable(object):
         return self.__mul__(o)
 
     def udiv(self, o):
+        if not isinstance(o, six.integer_types):
+            o = o.to_cst()
         return self.__call_op('div', o)
 
     def __truediv__(self, o):
@@ -205,9 +208,13 @@ class MBAVariable(object):
         return self.__or__(o)
 
     def __lshift__(self, o):
+        if not isinstance(o, six.integer_types):
+            o = o.to_cst()
         return self.__call_op('lshift', o)
 
     def __rshift__(self, o):
+        if not isinstance(o, six.integer_types):
+            o = o.to_cst()
         return self.__call_op('rshift', o)
 
     def __invert__(self):
@@ -295,7 +302,10 @@ class MBAVariable(object):
         If a variable is missing from values, an exception will occur. (x
         or y in the example above)
         '''
-        return self.mba.evaluate(self.vec, values)
+        ret = self.mba.evaluate(self.vec, values)
+        if isinstance(ret, six.integer_types):
+            return ret
+        return self.from_vec(self.mba, ret)
     eval = evaluate
 
     def expand_esf(self):
@@ -404,7 +414,9 @@ class MBA(MBAImpl):
             ])
         '''
 
-        return self.from_vec(self.var_symbols(name))
+        ret = self.from_vec(self.var_symbols(name)) 
+        ret.name = name
+        return ret
 
     def from_vec(self, v):
         ''' Get an :class:`MBAVariable` object with the vector's values.
